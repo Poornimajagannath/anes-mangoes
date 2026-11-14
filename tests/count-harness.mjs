@@ -89,6 +89,8 @@ await page.addInitScript(() => {
   if (Orig) {
     const Wrapped = function AudioContextWrapped() {
       const ctx = new Orig();
+      window.__audioContexts = window.__audioContexts || [];
+      window.__audioContexts.push(ctx);
       const resume = ctx.resume.bind(ctx);
       ctx.resume = () => {
         window.__audioResumes += 1;
@@ -154,12 +156,22 @@ try {
   await page.goto(origin + '/', { waitUntil: 'load' });
   assert(await page.locator('#story').isVisible(), 'story hidden');
   assert((await page.locator('#story-text').textContent()) === STORY, 'story copy');
-  assert((await utters()).some((t) => t === STORY), 'story not spoken');
+  assert((await utters()).length === 0, 'spoke before a tap');
+  assert(await page.evaluate(() => (window.__audioContexts || []).length) === 0, 'audio context before a tap');
   const storyImg = await page.locator('.story-ane').evaluate((el) => el.complete && el.naturalWidth > 0);
   assert(storyImg, 'sad Ane did not load');
   const go = await page.locator('#story-go').boundingBox();
   assert(go && go.height >= 88 && go.width >= 88, 'story button small');
+  const start = await page.locator('#tap-start').boundingBox();
+  assert(start && start.height >= 112 && start.width >= 200, 'start button small');
   await shot('story.png');
+
+  await page.locator('#tap-start').click();
+  await page.waitForFunction((line) => window.__utters.some((u) => u.text === line), STORY);
+  await page.waitForFunction(() => {
+    const ctx = (window.__audioContexts || [])[0];
+    return ctx && ctx.state === 'running';
+  });
 
   await page.locator('#story-go').click();
   await pause(150);
@@ -188,6 +200,10 @@ try {
   await page.locator('.fruit:not([disabled])').first().click();
   await page.waitForFunction(() => document.getElementById('play').getAttribute('data-found') === '2');
   assert((await page.locator('#count').textContent()) === '2/5', 'mid count');
+  await page.waitForFunction(() => {
+    const said = window.__utters.map((u) => u.text);
+    return said.indexOf('One!') !== -1 && said.indexOf('Two!') !== -1;
+  });
   const said = await utters();
   assert(said.includes('One!') && said.includes('Two!'), 'count words ' + said.join(' | '));
   await shot('ane-count.png');

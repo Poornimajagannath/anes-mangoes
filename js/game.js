@@ -39,8 +39,13 @@
     }
   };
 
+  var INTRO = "Ane's mangoes are up in the tree. Let's count them into her basket!";
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var audio = null;
+  var audioUnlocked = false;
+  var started = false;
+  var keepAlive = 0;
+  var voiceWaiters = [];
   var level = LEVELS.ane;
   var found = 0;
   var round = 0;
@@ -48,30 +53,173 @@
   var busy = false;
   var winTimer = 0;
 
+  function currentVoices(synth) {
+    try { return (synth && synth.getVoices && synth.getVoices()) || []; }
+    catch (e) { return []; }
+  }
+
+  function chooseVoice(synth) {
+    var voices = currentVoices(synth);
+    var i;
+    var lang;
+    for (i = 0; i < voices.length; i++) {
+      lang = voices[i].lang || '';
+      if (/^en-US/i.test(lang)) return voices[i];
+    }
+    for (i = 0; i < voices.length; i++) {
+      lang = voices[i].lang || '';
+      if (/^en/i.test(lang)) return voices[i];
+    }
+    return voices[0] || null;
+  }
+
+  function fireVoices() {
+    var waiters = voiceWaiters.splice(0, voiceWaiters.length);
+    waiters.forEach(function (fn) {
+      try { fn(); } catch (e) {}
+    });
+  }
+
+  function hookVoices() {
+    var synth = window.speechSynthesis;
+    if (!synth) return;
+    if (synth.addEventListener) {
+      synth.addEventListener('voiceschanged', fireVoices);
+    } else {
+      var prev = synth.onvoiceschanged;
+      synth.onvoiceschanged = function () {
+        if (typeof prev === 'function') prev();
+        fireVoices();
+      };
+    }
+    if (currentVoices(synth).length) return;
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries += 1;
+      if (currentVoices(synth).length) {
+        clearInterval(timer);
+        fireVoices();
+      } else if (tries >= 25) {
+        clearInterval(timer);
+      }
+    }, 200);
+  }
+
+  function whenVoices(synth, cb) {
+    if (currentVoices(synth).length) {
+      cb();
+      return;
+    }
+    var done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      cb();
+    }
+    voiceWaiters.push(finish);
+    try { synth.getVoices(); } catch (e) {}
+    setTimeout(finish, 350);
+  }
+
+  function stopKeepAlive() {
+    if (!keepAlive) return;
+    clearInterval(keepAlive);
+    keepAlive = 0;
+  }
+
+  function armKeepAlive(synth) {
+    if (keepAlive) return;
+    keepAlive = setInterval(function () {
+      try {
+        if (synth.speaking) {
+          synth.pause();
+          synth.resume();
+        } else if (!synth.pending) {
+          stopKeepAlive();
+        }
+      } catch (e) {}
+    }, 10000);
+  }
+
+  function speakNow(synth, text) {
+    var utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.92;
+    var voice = chooseVoice(synth);
+    if (voice) utterance.voice = voice;
+    utterance.onend = function () {
+      try {
+        if (!synth.speaking && !synth.pending) stopKeepAlive();
+      } catch (e) {}
+    };
+    utterance.onerror = function () { stopKeepAlive(); };
+    armKeepAlive(synth);
+    synth.speak(utterance);
+  }
+
   function speak(text) {
+    if (!started) return;
     var synth = window.speechSynthesis;
     if (!synth || !text) return;
-    try { synth.cancel(); } catch (e) {}
+    whenVoices(synth, function () {
+      var say = function () {
+        try { speakNow(synth, text); } catch (e) {}
+      };
+      var busy = false;
+      try { busy = !!(synth.speaking || synth.pending); } catch (e2) {}
+      if (busy) {
+        try { synth.cancel(); } catch (e3) {}
+        setTimeout(say, 80);
+      } else {
+        say();
+      }
+    });
+  }
+
+  function primeSpeech() {
+    var synth = window.speechSynthesis;
+    if (!synth) return;
     try {
-      var u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US';
-      u.rate = 0.92;
-      synth.speak(u);
-    } catch (e2) {}
+      var utterance = new SpeechSynthesisUtterance('Hi');
+      utterance.lang = 'en-US';
+      utterance.rate = 1.05;
+      synth.speak(utterance);
+    } catch (e) {}
+  }
+
+  function playSilence() {
+    if (!audio) return;
+    var rate = audio.sampleRate || 22050;
+    var frames = Math.max(1, Math.floor(rate * 0.02));
+    var buffer = audio.createBuffer(1, frames, rate);
+    var source = audio.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audio.destination);
+    source.start(0);
   }
 
   function unlock() {
+    if (!started) return;
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     try {
       if (!audio) audio = new AC();
       var pendingAudio = audio.resume();
       if (pendingAudio && pendingAudio.catch) pendingAudio.catch(function () {});
+      if (!audioUnlocked) {
+        audioUnlocked = true;
+        try { playSilence(); } catch (e2) {}
+        if (pendingAudio && pendingAudio.then) {
+          pendingAudio.then(function () {
+            try { playSilence(); } catch (e3) {}
+          }).catch(function () {});
+        }
+      }
     } catch (e) {}
   }
 
   function pop() {
-    if (!audio) return;
+    if (!started || !audio) return;
     try {
       var t = audio.currentTime;
       var o = audio.createOscillator();
@@ -320,7 +468,11 @@
   function startLevel(id) {
     round += 1;
     clearTimeout(winTimer);
-    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+    try {
+      if (window.speechSynthesis && (speechSynthesis.speaking || speechSynthesis.pending)) {
+        speechSynthesis.cancel();
+      }
+    } catch (e) {}
     pending = [];
     busy = false;
     found = 0;
@@ -335,8 +487,25 @@
     show('play');
   }
 
-  document.addEventListener('pointerdown', unlock);
+  document.addEventListener('pointerdown', function () {
+    if (!started || !audio) return;
+    try {
+      var pendingAudio = audio.resume();
+      if (pendingAudio && pendingAudio.catch) pendingAudio.catch(function () {});
+    } catch (e) {}
+  });
+  function beginAudio() {
+    if (started) return;
+    started = true;
+    unlock();
+    primeSpeech();
+    speak(INTRO);
+    document.getElementById('tap-start').hidden = true;
+  }
+
+  document.getElementById('tap-start').addEventListener('click', beginAudio);
   document.getElementById('story-go').addEventListener('click', function () {
+    beginAudio();
     unlock();
     show('pick');
     speak('Who are we counting with?');
@@ -375,6 +544,6 @@
     drain();
   });
 
+  hookVoices();
   show('story');
-  speak("Ane's mangoes are up in the tree. Let's count them into her basket!");
 })();

@@ -101,6 +101,12 @@ img { -webkit-user-drag: none; }
   transition: transform 140ms var(--ease);
 }
 .go-light { background: var(--cream); color: var(--ink); }
+.go-start {
+  min-height: 128px;
+  font-size: 2rem;
+  background: #e23d3d;
+  color: #fffaf3;
+}
 
 .levels {
   width: 100%;
@@ -186,6 +192,7 @@ img { -webkit-user-drag: none; }
   .level { min-height: 148px; }
   .level img { height: min(16vh, 100px); }
   .top { min-height: 88px; }
+  .go-start { min-height: 112px; font-size: 1.7rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .bob { animation: none; }
