@@ -26,7 +26,7 @@
       id: 'kapi', name: 'Kapi', kind: 'banana', plural: 'bananas', label: 'Banana',
       where: 'tree',
       idle: 'assets/kapi-idle.webp',
-      cheer: 'assets/kapi-cheer.webp',
+      cheer: 'assets/kapi-idle.webp',
       win: 'assets/kapi-cheer.webp'
     },
     ziggy: {

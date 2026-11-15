@@ -159,6 +159,32 @@ const WINS = {
   kapi: 'Five bananas! Shabhash!',
   ziggy: 'Five balls! Shabhash!',
 };
+const POSES = {
+  ane: { play: 'ane-idle', win: 'ane-win' },
+  myna: { play: 'myna-idle', win: 'myna-cheer' },
+  kapi: { play: 'kapi-idle', win: 'kapi-cheer' },
+  ziggy: { play: 'ziggy-idle', win: 'ziggy-cheer' },
+};
+
+async function assertPlayPose(pageUnderTest, id) {
+  const pose = await pageUnderTest.evaluate(() => {
+    const img = document.getElementById('character');
+    const basket = document.getElementById('basket');
+    const box = basket.getBoundingClientRect();
+    return {
+      src: img.getAttribute('src'),
+      pose: img.getAttribute('data-pose'),
+      anim: getComputedStyle(img).animationName,
+      basketH: box.height,
+      basketHidden: basket.hidden,
+    };
+  });
+  assert(pose.pose === 'idle', id + ' pose ' + pose.pose);
+  assert(pose.src.includes(POSES[id].play), id + ' play src ' + pose.src);
+  assert(!pose.src.includes(POSES[id].win), id + ' yay during play ' + pose.src);
+  assert(pose.anim === 'bob', id + ' not animating ' + pose.anim);
+  assert(!pose.basketHidden && pose.basketH >= 40, id + ' basket ' + pose.basketH);
+}
 
 async function openLevel(id) {
   await page.locator('.level[data-level="' + id + '"]').click();
@@ -222,6 +248,7 @@ try {
   assert((await page.evaluate(() => window.__audioResumes)) >= 1, 'audio not unlocked');
 
   await openLevel('ane');
+  await assertPlayPose(page, 'ane');
   assert(await page.locator('.fruit').count() === 5, 'ane objects');
   const kinds = await page.locator('.fruit').evaluateAll((els) => els.map((el) => el.getAttribute('data-kind')));
   assert(kinds.every((k) => k === 'mango'), 'ane kinds ' + kinds.join(','));
@@ -251,7 +278,7 @@ try {
   assert((await page.locator('#win-line').textContent()) === WINS.ane, 'ane win line');
   await page.waitForFunction((line) => window.__plays.some((p) => !p.muted && p.line === line), WINS.ane);
   const winSrc = await page.locator('#win-character').getAttribute('src');
-  assert(winSrc && winSrc.includes('ane-win'), 'win pose ' + winSrc);
+  assert(winSrc && winSrc.includes(POSES.ane.win), 'win pose ' + winSrc);
   const again = await page.locator('#again').boundingBox();
   const another = await page.locator('#another').boundingBox();
   assert(again && again.height >= 88, 'play again small');
@@ -269,6 +296,8 @@ try {
 
   for (const id of ['myna', 'kapi', 'ziggy']) {
     await openLevel(id);
+    await assertPlayPose(page, id);
+    if (id === 'kapi') await shot('kapi-play.png');
     const levelKinds = await page.locator('.fruit').evaluateAll((els) => els.map((el) => el.getAttribute('data-kind')));
     const expectKind = id === 'myna' ? 'apple' : id === 'kapi' ? 'banana' : 'ball';
     assert(levelKinds.every((k) => k === expectKind), id + ' kinds ' + levelKinds.join(','));
@@ -280,6 +309,9 @@ try {
     await countAll(page);
     assert((await page.locator('#win-line').textContent()) === WINS[id], id + ' win');
     await page.waitForFunction((line) => window.__plays.some((p) => !p.muted && p.line === line), WINS[id]);
+    const levelWin = await page.locator('#win-character').getAttribute('src');
+    assert(levelWin && levelWin.includes(POSES[id].win), id + ' win pose ' + levelWin);
+    if (id === 'kapi') await shot('kapi-win.png');
     if (id !== 'ziggy') await page.locator('#another').click();
   }
 
