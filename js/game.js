@@ -40,12 +40,24 @@
   };
 
   var INTRO = "Ane's mangoes are up in the tree. Let's count them into her basket!";
+  var WHO = 'Who are we counting with?';
+  var LINES = {};
+  LINES[INTRO] = 'assets/voice/intro.mp3';
+  LINES[WHO] = 'assets/voice/who.mp3';
+  LINES['One!'] = 'assets/voice/one.mp3';
+  LINES['Two!'] = 'assets/voice/two.mp3';
+  LINES['Three!'] = 'assets/voice/three.mp3';
+  LINES['Four!'] = 'assets/voice/four.mp3';
+  LINES['Five!'] = 'assets/voice/five.mp3';
+  LINES['Five mangoes! Shabhash!'] = 'assets/voice/win-mangoes.mp3';
+  LINES['Five apples! Shabhash!'] = 'assets/voice/win-apples.mp3';
+  LINES['Five bananas! Shabhash!'] = 'assets/voice/win-bananas.mp3';
+  LINES['Five balls! Shabhash!'] = 'assets/voice/win-balls.mp3';
+  var clips = {};
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var audio = null;
   var audioUnlocked = false;
   var started = false;
-  var keepAlive = 0;
-  var voiceWaiters = [];
   var level = LEVELS.ane;
   var found = 0;
   var round = 0;
@@ -53,13 +65,24 @@
   var busy = false;
   var winTimer = 0;
 
-  function currentVoices(synth) {
-    try { return (synth && synth.getVoices && synth.getVoices()) || []; }
-    catch (e) { return []; }
+  function prepareVoice() {
+    Object.keys(LINES).forEach(function (text) {
+      var el = document.createElement('audio');
+      el.preload = 'auto';
+      el.src = LINES[text];
+      el.setAttribute('playsinline', '');
+      el.setAttribute('webkit-playsinline', '');
+      el.setAttribute('data-line', text);
+      el.setAttribute('aria-hidden', 'true');
+      el.addEventListener('error', function () { el.setAttribute('data-broken', '1'); });
+      document.body.appendChild(el);
+      clips[text] = el;
+    });
   }
 
   function chooseVoice(synth) {
-    var voices = currentVoices(synth);
+    var voices = [];
+    try { voices = (synth.getVoices && synth.getVoices()) || []; } catch (e) {}
     var i;
     var lang;
     for (i = 0; i < voices.length; i++) {
@@ -73,118 +96,87 @@
     return voices[0] || null;
   }
 
-  function fireVoices() {
-    var waiters = voiceWaiters.splice(0, voiceWaiters.length);
-    waiters.forEach(function (fn) {
-      try { fn(); } catch (e) {}
-    });
-  }
-
-  function hookVoices() {
-    var synth = window.speechSynthesis;
-    if (!synth) return;
-    if (synth.addEventListener) {
-      synth.addEventListener('voiceschanged', fireVoices);
-    } else {
-      var prev = synth.onvoiceschanged;
-      synth.onvoiceschanged = function () {
-        if (typeof prev === 'function') prev();
-        fireVoices();
-      };
-    }
-    if (currentVoices(synth).length) return;
-    var tries = 0;
-    var timer = setInterval(function () {
-      tries += 1;
-      if (currentVoices(synth).length) {
-        clearInterval(timer);
-        fireVoices();
-      } else if (tries >= 25) {
-        clearInterval(timer);
-      }
-    }, 200);
-  }
-
-  function whenVoices(synth, cb) {
-    if (currentVoices(synth).length) {
-      cb();
-      return;
-    }
-    var done = false;
-    function finish() {
-      if (done) return;
-      done = true;
-      cb();
-    }
-    voiceWaiters.push(finish);
-    try { synth.getVoices(); } catch (e) {}
-    setTimeout(finish, 350);
-  }
-
-  function stopKeepAlive() {
-    if (!keepAlive) return;
-    clearInterval(keepAlive);
-    keepAlive = 0;
-  }
-
-  function armKeepAlive(synth) {
-    if (keepAlive) return;
-    keepAlive = setInterval(function () {
-      try {
-        if (synth.speaking) {
-          synth.pause();
-          synth.resume();
-        } else if (!synth.pending) {
-          stopKeepAlive();
-        }
-      } catch (e) {}
-    }, 10000);
-  }
-
-  function speakNow(synth, text) {
-    var utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.92;
-    var voice = chooseVoice(synth);
-    if (voice) utterance.voice = voice;
-    utterance.onend = function () {
-      try {
-        if (!synth.speaking && !synth.pending) stopKeepAlive();
-      } catch (e) {}
-    };
-    utterance.onerror = function () { stopKeepAlive(); };
-    armKeepAlive(synth);
-    synth.speak(utterance);
-  }
-
-  function speak(text) {
-    if (!started) return;
-    var synth = window.speechSynthesis;
-    if (!synth || !text) return;
-    whenVoices(synth, function () {
-      var say = function () {
-        try { speakNow(synth, text); } catch (e) {}
-      };
-      var busy = false;
-      try { busy = !!(synth.speaking || synth.pending); } catch (e2) {}
-      if (busy) {
-        try { synth.cancel(); } catch (e3) {}
-        setTimeout(say, 80);
-      } else {
-        say();
-      }
-    });
-  }
-
-  function primeSpeech() {
+  function speakFallback(text) {
+    if (!started || !text) return;
     var synth = window.speechSynthesis;
     if (!synth) return;
     try {
-      var utterance = new SpeechSynthesisUtterance('Hi');
+      var utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = 1.05;
+      utterance.rate = 0.92;
+      var voice = chooseVoice(synth);
+      if (voice) utterance.voice = voice;
       synth.speak(utterance);
     } catch (e) {}
+  }
+
+  function setPlaybackSession() {
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    } catch (e) {}
+  }
+
+  function watchPlay(el, text) {
+    var pendingPlay;
+    try { pendingPlay = el.play(); }
+    catch (e) {
+      speakFallback(text);
+      return;
+    }
+    if (pendingPlay && pendingPlay.catch) {
+      pendingPlay.catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        el.setAttribute('data-broken', '1');
+        speakFallback(text);
+      });
+    }
+  }
+
+  function say(text) {
+    if (!started || !text) return;
+    var el = clips[text];
+    if (!el || el.getAttribute('data-broken') === '1') {
+      speakFallback(text);
+      return;
+    }
+    Object.keys(clips).forEach(function (key) {
+      if (key === text) return;
+      var other = clips[key];
+      if (!other.paused) {
+        try { other.pause(); } catch (e) {}
+      }
+    });
+    try { el.currentTime = 0; } catch (e2) {}
+    el.muted = false;
+    el.volume = 1;
+    watchPlay(el, text);
+  }
+
+  // iOS only allows playback that begins inside the tap. Every clip is play()'d
+  // here; the line we want is audible and the rest are silent unlocks.
+  function beginVoice(text) {
+    setPlaybackSession();
+    Object.keys(clips).forEach(function (key) {
+      var el = clips[key];
+      var hear = key === text;
+      el.muted = !hear;
+      el.volume = 1;
+      try { el.currentTime = 0; } catch (e) {}
+      if (hear) {
+        if (el.getAttribute('data-broken') === '1') speakFallback(key);
+        else watchPlay(el, key);
+        return;
+      }
+      var pendingPlay;
+      try { pendingPlay = el.play(); } catch (e2) { return; }
+      if (pendingPlay && pendingPlay.then) {
+        pendingPlay.then(function () {
+          try { el.pause(); el.currentTime = 0; } catch (e3) {}
+          el.muted = false;
+        }).catch(function () { el.muted = false; });
+      }
+    });
+    if (!clips[text]) speakFallback(text);
   }
 
   function playSilence() {
@@ -434,7 +426,7 @@
     clearTimeout(winTimer);
     winTimer = setTimeout(function () {
       if (token !== round) return;
-      speak(line);
+      say(line);
     }, 700);
   }
 
@@ -454,7 +446,7 @@
       document.getElementById('basket').innerHTML = basketMarkup(level.kind, found);
       pop();
       if (level.chase) setPose('cheer');
-      speak(WORDS[found - 1]);
+      say(WORDS[found - 1]);
       if (found >= 5) return wait(520).then(function () { if (token === round) showWin(); });
       return returnHero().then(function () { if (token === round) setPose('idle'); });
     }).then(function () {
@@ -468,11 +460,14 @@
   function startLevel(id) {
     round += 1;
     clearTimeout(winTimer);
+    Object.keys(clips).forEach(function (key) {
+      try { if (!clips[key].paused) clips[key].pause(); } catch (e) {}
+    });
     try {
       if (window.speechSynthesis && (speechSynthesis.speaking || speechSynthesis.pending)) {
         speechSynthesis.cancel();
       }
-    } catch (e) {}
+    } catch (e2) {}
     pending = [];
     busy = false;
     found = 0;
@@ -494,21 +489,22 @@
       if (pendingAudio && pendingAudio.catch) pendingAudio.catch(function () {});
     } catch (e) {}
   });
-  function beginAudio() {
+  function beginAudio(line) {
     if (started) return;
     started = true;
     unlock();
-    primeSpeech();
-    speak(INTRO);
+    beginVoice(line || INTRO);
     document.getElementById('tap-start').hidden = true;
   }
 
-  document.getElementById('tap-start').addEventListener('click', beginAudio);
+  document.getElementById('tap-start').addEventListener('click', function () {
+    beginAudio(INTRO);
+  });
   document.getElementById('story-go').addEventListener('click', function () {
-    beginAudio();
+    if (!started) beginAudio(WHO);
+    else say(WHO);
     unlock();
     show('pick');
-    speak('Who are we counting with?');
   });
   document.getElementById('back').addEventListener('click', function () {
     unlock();
@@ -527,7 +523,7 @@
     round += 1;
     clearTimeout(winTimer);
     show('pick');
-    speak('Who are we counting with?');
+    say(WHO);
   });
   document.querySelector('.levels').addEventListener('click', function (e) {
     var btn = e.target.closest('.level');
@@ -544,6 +540,6 @@
     drain();
   });
 
-  hookVoices();
+  prepareVoice();
   show('story');
 })();

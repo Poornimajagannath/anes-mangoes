@@ -33,6 +33,7 @@ const types = {
   '.js': 'text/javascript',
   '.webp': 'image/webp',
   '.png': 'image/png',
+  '.mp3': 'audio/mpeg',
 };
 
 const server = createServer(async (req, res) => {
@@ -84,7 +85,32 @@ page.on('response', (res) => { if (res.status() >= 400) failed.push(res.status()
 
 await page.addInitScript(() => {
   window.__utters = [];
+  window.__plays = [];
   window.__audioResumes = 0;
+  const origPlay = HTMLAudioElement.prototype.play;
+  HTMLAudioElement.prototype.play = function () {
+    const rec = {
+      line: this.getAttribute('data-line'),
+      muted: this.muted,
+      volume: this.volume,
+      during: !!(window.event && /^(click|pointerup|pointerdown|touchend|touchstart)$/.test(window.event.type)),
+      settled: 'pending'
+    };
+    window.__plays.push(rec);
+    let pendingPlay;
+    try {
+      pendingPlay = origPlay.apply(this, arguments);
+    } catch (err) {
+      rec.settled = 'throw ' + (err && err.name);
+      throw err;
+    }
+    if (pendingPlay && pendingPlay.then) {
+      pendingPlay.then(function () { rec.settled = 'ok'; }, function (err) {
+        rec.settled = 'err ' + (err && err.name);
+      });
+    } else rec.settled = 'ok';
+    return pendingPlay;
+  };
   const Orig = window.AudioContext || window.webkitAudioContext;
   if (Orig) {
     const Wrapped = function AudioContextWrapped() {
@@ -118,6 +144,9 @@ function pause(ms) {
 }
 async function utters() {
   return page.evaluate(() => window.__utters.map((u) => u.text));
+}
+async function heard() {
+  return page.evaluate(() => window.__plays.filter((p) => !p.muted && p.line).map((p) => p.line));
 }
 async function shot(name) {
   await mkdir(shots, { recursive: true });
@@ -157,6 +186,7 @@ try {
   assert(await page.locator('#story').isVisible(), 'story hidden');
   assert((await page.locator('#story-text').textContent()) === STORY, 'story copy');
   assert((await utters()).length === 0, 'spoke before a tap');
+  assert((await heard()).length === 0, 'played before a tap');
   assert(await page.evaluate(() => (window.__audioContexts || []).length) === 0, 'audio context before a tap');
   const storyImg = await page.locator('.story-ane').evaluate((el) => el.complete && el.naturalWidth > 0);
   assert(storyImg, 'sad Ane did not load');
@@ -167,7 +197,12 @@ try {
   await shot('story.png');
 
   await page.locator('#tap-start').click();
-  await page.waitForFunction((line) => window.__utters.some((u) => u.text === line), STORY);
+  await page.waitForFunction((line) => {
+    const plays = window.__plays;
+    if (!plays.length || plays.some((p) => p.settled === 'pending')) return false;
+    if (plays.some((p) => p.settled.indexOf('err') === 0 || p.settled.indexOf('throw') === 0)) return false;
+    return plays.some((p) => p.line === line && !p.muted && p.during);
+  }, STORY);
   await page.waitForFunction(() => {
     const ctx = (window.__audioContexts || [])[0];
     return ctx && ctx.state === 'running';
@@ -201,10 +236,10 @@ try {
   await page.waitForFunction(() => document.getElementById('play').getAttribute('data-found') === '2');
   assert((await page.locator('#count').textContent()) === '2/5', 'mid count');
   await page.waitForFunction(() => {
-    const said = window.__utters.map((u) => u.text);
+    const said = window.__plays.filter((p) => !p.muted).map((p) => p.line);
     return said.indexOf('One!') !== -1 && said.indexOf('Two!') !== -1;
   });
-  const said = await utters();
+  const said = await heard();
   assert(said.includes('One!') && said.includes('Two!'), 'count words ' + said.join(' | '));
   await shot('ane-count.png');
   await page.locator('.fruit:not([disabled])').first().click();
@@ -214,7 +249,7 @@ try {
   await page.locator('.fruit:not([disabled])').first().click();
   await page.waitForFunction(() => !document.getElementById('win').hidden);
   assert((await page.locator('#win-line').textContent()) === WINS.ane, 'ane win line');
-  await page.waitForFunction((line) => window.__utters.some((u) => u.text === line), WINS.ane);
+  await page.waitForFunction((line) => window.__plays.some((p) => !p.muted && p.line === line), WINS.ane);
   const winSrc = await page.locator('#win-character').getAttribute('src');
   assert(winSrc && winSrc.includes('ane-win'), 'win pose ' + winSrc);
   const again = await page.locator('#again').boundingBox();
@@ -244,7 +279,7 @@ try {
     }
     await countAll(page);
     assert((await page.locator('#win-line').textContent()) === WINS[id], id + ' win');
-    await page.waitForFunction((line) => window.__utters.some((u) => u.text === line), WINS[id]);
+    await page.waitForFunction((line) => window.__plays.some((p) => !p.muted && p.line === line), WINS[id]);
     if (id !== 'ziggy') await page.locator('#another').click();
   }
 
