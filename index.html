@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#79c8f0">
+<meta name="theme-color" content="#8fd0f5">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cellipse cx='8' cy='9' rx='5' ry='6' fill='%23f0a020'/%3E%3C/svg%3E">
 <title>Ane's mangoes</title>
 <link rel="stylesheet" href="css/game.css">
@@ -11,15 +11,21 @@
 <body>
 <div id="app">
   <header class="top">
-    <button class="back" id="back" type="button" hidden aria-label="Pick a friend">‹</button>
-    <p class="count" id="count" hidden aria-live="polite">0/5</p>
+    <button class="back" id="back" type="button" hidden aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <p class="count" id="count" hidden data-kind="mango" aria-live="polite">0/5</p>
   </header>
 
   <section class="screen story" id="story">
+    <div class="story-hero">
+      <img class="bob story-ane" src="assets/ane-sad.webp" alt="Ane">
+    </div>
     <p class="plate" id="story-text">Ane's mangoes are up in the tree. Let's count them into her basket!</p>
-    <img class="bob story-ane" src="assets/ane-sad.webp" alt="Ane">
-    <button class="go" id="story-go" type="button">Let's count!</button>
-    <button class="go go-start" id="tap-start" type="button">🔊 Tap to start</button>
+    <div class="actions">
+      <button class="go" id="story-go" type="button">Let's count!</button>
+      <button class="go go-start" id="tap-start" type="button">🔊 Tap to start</button>
+    </div>
   </section>
 
   <section class="screen pick" id="pick" hidden>
@@ -55,19 +61,23 @@
         <div class="hero-run" id="hero-run">
           <img class="bob" id="character" alt="" data-pose="idle" src="assets/ane-idle.webp">
         </div>
-        <div class="basket" id="basket"></div>
       </div>
+      <div class="basket" id="basket"></div>
     </div>
   </section>
 
   <section class="screen win" id="win" hidden>
-    <div class="win-art">
-      <img class="bob" id="win-character" alt="">
-      <div class="basket win-basket" id="win-basket" hidden></div>
+    <div class="win-hero">
+      <div class="win-art">
+        <img class="bob" id="win-character" alt="">
+        <div class="basket win-basket" id="win-basket" hidden></div>
+      </div>
     </div>
-    <p class="plate" id="win-line"></p>
-    <button class="go" id="again" type="button">Play again</button>
-    <button class="go go-light" id="another" type="button">Another friend</button>
+    <p class="plate plate-display" id="win-line"></p>
+    <div class="actions">
+      <button class="go" id="again" type="button">Play again</button>
+      <button class="go go-light" id="another" type="button">Another friend</button>
+    </div>
   </section>
 </div>
 <script src="js/game.js"></script>

@@ -3,10 +3,11 @@
   'use strict';
 
   var EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+  var EASE_MOVE = 'cubic-bezier(0.77, 0, 0.175, 1)';
   var WORDS = ['One!', 'Two!', 'Three!', 'Four!', 'Five!'];
-  var TREE = [[58, 16], [84, 24], [52, 34], [82, 44], [64, 54]];
-  var GRASS = [[14, 58], [44, 62], [16, 76], [46, 80], [28, 90]];
-  var BALLS = ['#ff5a5a', '#3aa0ff', '#ffe14a', '#3dcc6e', '#b06bff'];
+  var TREE = [[66, 24], [84, 28], [58, 32], [74, 36], [56, 40]];
+  var GRASS = [[20, 66], [46, 66], [20, 76], [46, 76], [34, 58]];
+  var BALLS = ['#ff5a5a', '#3aa0ff', '#ffe14a', '#3dcc6e', '#f0a020'];
   var LEVELS = {
     ane: {
       id: 'ane', name: 'Ane', kind: 'mango', plural: 'mangoes', label: 'Mango',
@@ -55,6 +56,7 @@
   LINES['Five balls! Shabhash!'] = 'assets/voice/win-balls.mp3';
   var clips = {};
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var screenId = 'story';
   var audio = null;
   var audioUnlocked = false;
   var started = false;
@@ -246,10 +248,13 @@
   }
 
   function show(id) {
+    screenId = id;
     ['story', 'pick', 'play', 'win'].forEach(function (name) {
       document.getElementById(name).hidden = name !== id;
     });
-    document.getElementById('back').hidden = id !== 'play';
+    var back = document.getElementById('back');
+    back.hidden = id === 'story';
+    back.setAttribute('aria-label', id === 'pick' ? 'Story' : 'Pick a friend');
     document.getElementById('count').hidden = id !== 'play' && id !== 'win';
   }
 
@@ -260,68 +265,88 @@
   function fruitSVG(kind, color) {
     if (kind === 'mango') {
       return svgWrap(
-        '<g transform="rotate(-24 32 36)">' +
-          '<ellipse cx="32" cy="38" rx="15" ry="20" fill="#f0a020" stroke="#243028" stroke-width="3.5"/>' +
-          '<ellipse cx="38" cy="42" rx="6" ry="9" fill="#e4532c"/>' +
-          '<ellipse cx="25" cy="30" rx="4" ry="7" fill="#fff3c4" opacity="0.85"/>' +
-        '</g>' +
-        '<path d="M30 16c8-10 18-8 20-2-8 0-14 4-16 10z" fill="#3e9a45" stroke="#243028" stroke-width="3" stroke-linejoin="round"/>'
+        '<path d="M34 12c1-6 7-8 9-3" fill="none" stroke="#6b442c" stroke-width="2.6" stroke-linecap="round"/>' +
+        '<path d="M30 13c7-3 14 2 11 9-5 0-9-2-11-7z" fill="#2f6f4e"/>' +
+        '<path d="M32 20c13 1 22 14 18 28-4 12-16 16-22 14-12-4-20-16-16-30 2-8 11-13 20-12z" fill="#f0a020"/>' +
+        '<path d="M22 32c5-7 12-8 16-3-5 2-10 3-14 1z" fill="#ffe14a" opacity="0.9"/>' +
+        '<path d="M38 42c5 1 8 7 4 11-5-1-8-5-8-9z" fill="#e08a14"/>'
       );
     }
     if (kind === 'apple') {
       return svgWrap(
-        '<circle cx="32" cy="36" r="18" fill="#e23d3d" stroke="#243028" stroke-width="3.5"/>' +
-        '<ellipse cx="24" cy="30" rx="5" ry="7" fill="#fff" opacity="0.4"/>' +
-        '<path d="M32 20c1-8 8-12 13-9" fill="none" stroke="#6b3a16" stroke-width="3" stroke-linecap="round"/>' +
-        '<path d="M33 16c8-4 14 2 10 9-6-1-10-4-10-9z" fill="#3e9a45" stroke="#243028" stroke-width="3" stroke-linejoin="round"/>'
+        '<path d="M32 12c1-6 7-8 10-4" fill="none" stroke="#6b442c" stroke-width="2.5" stroke-linecap="round"/>' +
+        '<path d="M30 14c7-3 13 1 10 8-5 0-9-2-11-6z" fill="#2f6f4e"/>' +
+        '<circle cx="32" cy="38" r="18" fill="#e23d3d"/>' +
+        '<ellipse cx="24" cy="32" rx="5" ry="7" fill="#fff" opacity="0.4"/>'
       );
     }
     if (kind === 'banana') {
       return svgWrap(
-        '<path d="M16 42c6-20 20-28 36-22 1 7-6 12-12 14-8 3-14 8-18 16-4-2-6-5-6-8z" fill="#ffe14a" stroke="#243028" stroke-width="3.5" stroke-linejoin="round"/>' +
-        '<path d="M46 18c7-3 12 2 9 7" fill="none" stroke="#8a5a12" stroke-width="3" stroke-linecap="round"/>' +
-        '<ellipse cx="24" cy="30" rx="3.5" ry="6" fill="#fff6c4" opacity="0.9" transform="rotate(-28 24 30)"/>'
+        '<path d="M14 42c6-18 18-26 34-20 1 6-5 11-11 13-8 3-14 8-17 16-4-2-6-5-6-9z" fill="#ffe14a" stroke="#1c2b22" stroke-width="3" stroke-linejoin="round"/>' +
+        '<path d="M44 20c6-2 10 2 8 6" fill="none" stroke="#6b442c" stroke-width="2.5" stroke-linecap="round"/>' +
+        '<ellipse cx="22" cy="30" rx="3" ry="6" fill="#fff6c4" opacity="0.9" transform="rotate(-28 22 30)"/>'
       );
     }
     return svgWrap(
-      '<circle cx="32" cy="32" r="20" fill="' + color + '" stroke="#243028" stroke-width="3.5"/>' +
-      '<path d="M14 32h36M32 13c7 8 7 30 0 38M32 13c-7 8-7 30 0 38" fill="none" stroke="#243028" stroke-width="2.5"/>' +
-      '<ellipse cx="24" cy="22" rx="6" ry="4" fill="#fff" opacity="0.55"/>'
+      '<circle cx="32" cy="34" r="20" fill="' + color + '" stroke="#1c2b22" stroke-width="3"/>' +
+      '<path d="M14 34h36M32 15c7 8 7 28 0 36M32 15c-7 8-7 28 0 36" fill="none" stroke="#1c2b22" stroke-width="2.4"/>' +
+      '<ellipse cx="24" cy="24" rx="6" ry="4" fill="#fff" opacity="0.55"/>'
     );
   }
 
-  function mini(kind, i) {
-    var x = 22 + (i % 5) * 16;
-    var y = i > 2 ? 30 : 22;
+  function mini(kind, i, n) {
+    var gap = n <= 1 ? 0 : Math.min(36, 150 / (n - 1));
+    var x = 160 - (gap * (n - 1)) / 2 + gap * i;
+    var y = 66;
+    var shape;
     if (kind === 'ball') {
-      return '<circle cx="' + x + '" cy="' + y + '" r="6" fill="' + BALLS[i] + '" stroke="#243028" stroke-width="2"/>';
+      shape = '<circle cx="' + x + '" cy="' + y + '" r="16" fill="' + BALLS[i] + '" stroke="#1c2b22" stroke-width="3"/>';
+    } else if (kind === 'apple') {
+      shape = '<circle cx="' + x + '" cy="' + y + '" r="16" fill="#e23d3d" stroke="#1c2b22" stroke-width="3"/>' +
+        '<path d="M' + x + ' ' + (y - 16) + 'c4-7 10-6 11-1" fill="none" stroke="#6b442c" stroke-width="2.4" stroke-linecap="round"/>';
+    } else if (kind === 'banana') {
+      shape = '<path d="M' + (x - 16) + ' ' + (y + 8) + 'c5-16 16-20 26-14" fill="none" stroke="#ffe14a" stroke-width="9" stroke-linecap="round"/>';
+    } else {
+      shape = '<path d="M' + (x - 4) + ' ' + (y - 18) + 'c5-8 12-8 14-2-6 1-10 2-12 7z" fill="#2f6f4e"/>' +
+        '<path d="M' + x + ' ' + (y - 10) + 'c10 1 16 10 13 20-3 8-11 11-16 10-8-2-14-11-12-20 1-6 8-11 15-10z" fill="#f0a020" stroke="#1c2b22" stroke-width="3"/>';
     }
-    if (kind === 'apple') {
-      return '<circle cx="' + x + '" cy="' + (y + 2) + '" r="6" fill="#e23d3d" stroke="#243028" stroke-width="2"/>';
-    }
-    if (kind === 'banana') {
-      return '<path d="M' + (x - 6) + ' ' + (y + 4) + 'c3-8 10-10 14-6" fill="none" stroke="#ffe14a" stroke-width="4" stroke-linecap="round"/>';
-    }
-    return '<ellipse cx="' + x + '" cy="' + y + '" rx="5" ry="7" fill="#f0a020" stroke="#243028" stroke-width="2" transform="rotate(-20 ' + x + ' ' + y + ')"/>';
+    return '<g transform="translate(' + x + ' ' + y + ') scale(1.35) translate(' + (-x) + ' ' + (-y) + ')">' + shape + '</g>';
   }
 
   function basketMarkup(kind, n) {
     var fruits = '';
-    for (var i = 0; i < n; i++) fruits += mini(kind, i);
-    return '<svg viewBox="0 0 120 86" aria-hidden="true">' +
+    for (var i = 0; i < n; i++) fruits += mini(kind, i, n);
+    return '<svg viewBox="0 0 320 128" aria-hidden="true">' +
+      '<path d="M104 68c16-34 96-34 112 0" fill="none" stroke="#6b442c" stroke-width="8" stroke-linecap="round"/>' +
       fruits +
-      '<path d="M18 28h84l-10 46H28z" fill="#c6863a" stroke="#243028" stroke-width="4" stroke-linejoin="round"/>' +
-      '<path d="M34 32v38M50 30v42M66 30v42M82 32v36" stroke="#a56a28" stroke-width="3"/>' +
-      '<path d="M24 46h74M26 58h68" stroke="#8a4e18" stroke-width="3" opacity="0.85"/>' +
-      '<path d="M12 28h96" fill="none" stroke="#8a4e18" stroke-width="8" stroke-linecap="round"/>' +
-      '<path d="M12 28h96" fill="none" stroke="#243028" stroke-width="4" stroke-linecap="round"/>' +
+      '<path d="M24 70h272l-24 44c-4 8-14 10-28 10H76c-14 0-24-2-28-10z" fill="#c47a32" stroke="#1c2b22" stroke-width="4" stroke-linejoin="round"/>' +
+      '<path d="M42 84h238M48 98h226" stroke="#8a4e18" stroke-width="4" stroke-linecap="round" opacity="0.85"/>' +
+      '<path d="M24 70h272" fill="none" stroke="#6b442c" stroke-width="9" stroke-linecap="round"/>' +
       '</svg>';
   }
 
   function paintCount() {
-    var text = found + '/5';
-    document.getElementById('count').textContent = text;
+    var el = document.getElementById('count');
+    el.textContent = found + '/5';
+    el.setAttribute('data-kind', level.kind);
     document.getElementById('play').setAttribute('data-found', String(found));
+    if (found > 0 && !reduce && el.animate) {
+      el.animate([
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.06)', offset: 0.4 },
+        { transform: 'scale(1)' }
+      ], { duration: 180, easing: EASE });
+    }
+  }
+
+  function nudgeBasket() {
+    var basket = document.getElementById('basket');
+    if (reduce || !basket.animate) return;
+    basket.animate([
+      { transform: 'translateX(-50%) scale(1)' },
+      { transform: 'translateX(-50%) scale(1.035)', offset: 0.45 },
+      { transform: 'translateX(-50%) scale(1)' }
+    ], { duration: 200, easing: EASE });
   }
 
   function setPose(pose) {
@@ -368,9 +393,9 @@
     btn.style.zIndex = '6';
     var anim = mover.animate([
       { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
-      { transform: 'translate(' + (dx * 0.48) + 'px, ' + (dy * 0.28 + lift) + 'px) scale(0.9)', opacity: 1, offset: 0.55 },
-      { transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(0.35)', opacity: 0 }
-    ], { duration: 520, easing: EASE, fill: 'forwards' });
+      { transform: 'translate(' + (dx * 0.48) + 'px, ' + (dy * 0.28 + lift) + 'px) scale(0.92)', opacity: 1, offset: 0.55 },
+      { transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(0.6)', opacity: 0 }
+    ], { duration: 300, easing: EASE_MOVE, fill: 'forwards' });
     return (anim.finished || Promise.resolve()).catch(function () {});
   }
 
@@ -384,7 +409,7 @@
     var anim = run.animate([
       { transform: 'translate(0px, 0px)' },
       { transform: 'translate(' + dx + 'px, ' + dy + 'px)' }
-    ], { duration: 260, easing: EASE, fill: 'forwards' });
+    ], { duration: 240, easing: EASE, fill: 'forwards' });
     return (anim.finished || Promise.resolve()).catch(function () {});
   }
 
@@ -427,7 +452,7 @@
     winTimer = setTimeout(function () {
       if (token !== round) return;
       say(line);
-    }, 700);
+    }, 420);
   }
 
   function drain() {
@@ -444,10 +469,11 @@
       found += 1;
       paintCount();
       document.getElementById('basket').innerHTML = basketMarkup(level.kind, found);
+      nudgeBasket();
       pop();
       if (level.chase) setPose('cheer');
       say(WORDS[found - 1]);
-      if (found >= 5) return wait(520).then(function () { if (token === round) showWin(); });
+      if (found >= 5) return wait(280).then(function () { if (token === round) showWin(); });
       return returnHero().then(function () { if (token === round) setPose('idle'); });
     }).then(function () {
       busy = false;
@@ -508,11 +534,17 @@
   });
   document.getElementById('back').addEventListener('click', function () {
     unlock();
+    if (screenId === 'pick') {
+      show('story');
+      return;
+    }
     round += 1;
     clearTimeout(winTimer);
     pending = [];
     busy = false;
+    var fromWin = screenId === 'win';
     show('pick');
+    if (fromWin) say(WHO);
   });
   document.getElementById('again').addEventListener('click', function () {
     unlock();
